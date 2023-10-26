@@ -1,8 +1,14 @@
 import argparse
+import os
 import os.path as osp
 from tqdm import tqdm
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.distributed as dist
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+import torch.multiprocessing as mp
 import csv
 from models.vgp_vit import VGPViT
 from models.slic_vit import SLICViT
@@ -27,17 +33,30 @@ def eval(model, dataset, iou_thr):
     acc = evaluator(torch.from_numpy(pred))
     print('Acc: {}'.format(acc))
 
+
 def evalVGPs(model, dataset, sim_thr):
+    # TODO: Multiple GPUs
+    # os.environ['MASTER_ADDR'] = 'localhost'
+    # os.environ['MASTER_PORT'] = '12355'
+    # os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3'
+
+    # dist.init_process_group("nccl", init_method='tcp://localhost:23456', rank=0, world_size=1)
+    # model = nn.parallel.DistributedDataParallel(model, device_ids=[0])
+
+    # DataLoader
+    # sampler = DistributedSampler(dataset)
+    # dataloader = DataLoader(dataset, batch_size=64, sampler=sampler)
+
     TruePredCnt = 0
     wrongCases = []
     processed = 0
-    for idx in tqdm(range(len(dataset))):
-        img = dataset[idx]['image']
-        phrases = dataset[idx]['phrases']
+    for data in tqdm(dataset):
+        # print(data)
+        idx, img, phrases, gt = [val for val in data.values()]
+        gt = gt=='True'
         heatmaps = model(img, phrases)
         similarity_score = cosine_similarity(heatmaps[0].reshape(1, -1), heatmaps[1].reshape(1, -1))[0, 0]
         pred = similarity_score > sim_thr
-        gt = dataset[idx]['isVGPs'] == 'True'
         TruePredCnt += pred==gt
         processed += 1
         if pred != gt:
@@ -219,6 +238,8 @@ else:
 # this experiment
 if parser_args.dataset == 'flickr_demo':
     dataset = FlickrVGPsDataset(data_type='demo')
+elif parser_args.dataset == 'flickr_test':
+    dataset = FlickrVGPsDataset(data_type='test')
 
 # TODO: other splits
 elif parser_args.dataset == 'flickr_original':

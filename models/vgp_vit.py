@@ -35,8 +35,16 @@ class VGPViT(nn.Module):
         self.temperature = temperature
         self.compactness = compactness
         self.sigma = sigma
+        self.cur_img = np.array([])
+        self.cur_img_feat = []
+        self.cur_img_masks = []
+        self.txt_feats = {}
+        self.heatmaps = {}
 
     def get_masks(self, im):
+        if np.array_equal(im, self.cur_img):
+            return self.cur_img_masks
+
         masks = []
         # Do SLIC with different number of segments so that it has a hierarchical scale structure
         # This can average out spurious activations that happens sometimes when the segments are too small
@@ -51,24 +59,37 @@ class VGPViT(nn.Module):
 
     def get_mask_scores(self, im, text):
         with torch.no_grad():
+            if np.array_equal(im, self.cur_img):
+                image_features = self.cur_img_feat
+                im = Image.fromarray(im).convert('RGB')
+                im = im.resize((224, 224))
+                masks = self.get_masks(np.array(im))
+                masks = torch.from_numpy(masks.astype(np.bool)).cuda()
             # im is uint8 numpy
-            h, w = im.shape[:2]
-            im = Image.fromarray(im).convert('RGB')
-            im = im.resize((224, 224))
-            masks = self.get_masks(np.array(im))
-            masks = torch.from_numpy(masks.astype(np.bool)).cuda()
-            im = self.model.preprocess(im).unsqueeze(0).cuda()
+            else:
+                self.cur_img = im
+                # h, w = im.shape[:2]
+                im = Image.fromarray(im).convert('RGB')
+                im = im.resize((224, 224))
+                masks = self.get_masks(np.array(im))
+                masks = torch.from_numpy(masks.astype(np.bool)).cuda()
+                im = self.model.preprocess(im).unsqueeze(0).cuda()
 
-            image_features = self.model(im, masks)
-            image_features = image_features.permute(0, 2, 1)
-
-            text = clip.tokenize([text]).cuda()
-            text_features = self.model.encode_text(text)
-
-            image_features = image_features / \
-                image_features.norm(dim=1, keepdim=True)
-            text_features = text_features / \
-                text_features.norm(dim=1, keepdim=True)
+                image_features = self.model(im, masks)
+                image_features = image_features.permute(0, 2, 1)
+                image_features = image_features / \
+                    image_features.norm(dim=1, keepdim=True)
+                self.cur_img_feat = image_features
+            
+            if text in self.txt_feats:
+                text_features = self.txt_feats[text]
+            else:
+                orig_txt = text
+                text = clip.tokenize([text]).cuda()
+                text_features = self.model.encode_text(text)
+                text_features = text_features / \
+                    text_features.norm(dim=1, keepdim=True)
+                self.txt_feats[orig_txt] = text_features
 
             logits = (image_features * text_features.unsqueeze(-1)).sum(1)
             assert logits.size(0) == 1
@@ -77,6 +98,11 @@ class VGPViT(nn.Module):
         return masks.cpu().numpy(), logits
 
     def get_heatmap(self, im, text):
+        if not np.array_equal(im, self.cur_img):
+            self.heatmaps = {}
+        if text in self.heatmaps:
+            return self.heatmaps[text]
+        
         masks, logits = self.get_mask_scores(im, text)
         heatmap = list(np.nan + np.zeros(masks.shape, dtype=np.float32))
         for i in range(len(masks)):
@@ -104,6 +130,7 @@ class VGPViT(nn.Module):
         heatmap[mask_valid] = (heatmap[mask_valid] -
                                _min) / (_max - _min + 1e-8)
         heatmap[np.logical_not(mask_valid)] = 0.
+        self.heatmaps[text] = heatmap
         return heatmap
 
     def forward(self, im, phrases, **args):

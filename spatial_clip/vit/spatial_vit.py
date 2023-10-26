@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import clip
 
+DEVICE = torch.cuda.current_device() if torch.cuda.is_available() else "cpu"
 
 class CLIPMaskedSpatialViT(nn.Module):
     def __init__(self, patch_size=16, upsample=1, start_block=0, align_corners=None):
@@ -20,10 +21,14 @@ class CLIPMaskedSpatialViT(nn.Module):
         if self.patch_size == 14:
             # TODO: GPU
             self.model, self.preprocess = clip.load(
-                "ViT-L/{}".format(self.patch_size))
+                "ViT-L/{}".format(self.patch_size),
+                device=DEVICE    
+            )
         else:
             self.model, self.preprocess = clip.load(
-                "ViT-B/{}".format(self.patch_size))
+                "ViT-B/{}".format(self.patch_size),
+                device=DEVICE
+            )
 
         self.align_corners = align_corners
 
