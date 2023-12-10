@@ -6,9 +6,11 @@ from PIL import Image
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torchvision import transforms
+import clip
 
 
-DATA_ROOT = "data"
+DATA_ROOT = "/work/adapting-CLIP-VGPs/data"
 
 class FlickrVGPsDataset(Dataset):
     def __init__(self, data_root=DATA_ROOT, data_type="test", phrase_types=[]):
@@ -25,7 +27,7 @@ class FlickrVGPsDataset(Dataset):
 
         self.image_paths = []
         self.phrase_pairs = []
-        self.isVGPs = []
+        self.labels = []
 
         self.anno_csv_path = osp.join(
             self.data_root,
@@ -39,21 +41,23 @@ class FlickrVGPsDataset(Dataset):
                 phrase1 = row["original_phrase1"]
                 phrase2 = row["original_phrase2"]
                 self.phrase_pairs.append([phrase1, phrase2])
-                self.isVGPs.append(row["ytrue"])
+                self.labels.append(row["ytrue"])
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
         img_path = osp.join(self.image_dir, self.image_paths[idx])
-        image = np.array(Image.open(img_path).convert("RGB"))
+        image = np.array(Image.open(img_path).convert("RGB").resize((224,224)))
+        # image = transforms.ToTensor()(image)
         phrase_pair = self.phrase_pairs[idx]
-        isVGPs = self.isVGPs[idx]
+        # phrase_pair = clip.tokenize(phrase_pair)
+        label = self.labels[idx]=='True'
         data = {
             "idx": idx,
             "image": image,
             "phrases": phrase_pair,
-            "isVGPs": isVGPs
+            "label": label
         }
         return data
 

@@ -34,7 +34,7 @@ def eval(model, dataset, iou_thr):
     print('Acc: {}'.format(acc))
 
 
-def evalVGPs(model, dataset, sim_thr):
+def evalVGPs(model, dataset, sim_thr, split='test'):
     # TODO: Multiple GPUs
     # os.environ['MASTER_ADDR'] = 'localhost'
     # os.environ['MASTER_PORT'] = '12355'
@@ -48,8 +48,7 @@ def evalVGPs(model, dataset, sim_thr):
     # dataloader = DataLoader(dataset, batch_size=64, sampler=sampler)
 
     TruePredCnt = 0
-    wrongCases = []
-    processed = 0
+    results = []
     for data in tqdm(dataset):
         # print(data)
         idx, img, phrases, gt = [val for val in data.values()]
@@ -58,17 +57,12 @@ def evalVGPs(model, dataset, sim_thr):
         similarity_score = cosine_similarity(heatmaps[0].reshape(1, -1), heatmaps[1].reshape(1, -1))[0, 0]
         pred = similarity_score > sim_thr
         TruePredCnt += pred==gt
-        processed += 1
-        if pred != gt:
-            wrongCases.append([idx, phrases, similarity_score, pred, gt])
-    # acc = TruePredCnt/len(dataset)
-    acc = TruePredCnt / processed
-    with open('data/flickr/demo_results.csv', 'w', encoding='utf-8') as f:
+        results.append([idx, phrases, similarity_score, pred, gt])
+    filename = f'data/flickr/{split}_results.csv'
+    with open(filename, 'w', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['dataset_idx', 'phrases', 'sim_score', 'pred', 'gt'])
-        writer.writerows(wrongCases)
-    print('Acc: {}'.format(acc))
-
+        writer.writerows(results)
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--model', type=str, default='vit14')
@@ -236,10 +230,16 @@ else:
 
 
 # this experiment
+split = ''
 if parser_args.dataset == 'flickr_demo':
+    split = 'demo'
     dataset = FlickrVGPsDataset(data_type='demo')
 elif parser_args.dataset == 'flickr_test':
+    split = 'test'
     dataset = FlickrVGPsDataset(data_type='test')
+elif parser_args.dataset == 'flickr_val':
+    split = 'val'
+    dataset = FlickrVGPsDataset(data_type='val')
 
 # TODO: other splits
 elif parser_args.dataset == 'flickr_original':
@@ -271,4 +271,4 @@ if parser_args.num_samples > 0:
     dataset.image_paths = dataset.image_paths[:parser_args.num_samples]
 
 # eval(model, dataset, iou_thr=parser_args.iou_thr)
-evalVGPs(model, dataset, sim_thr=0.7)
+evalVGPs(model, dataset, sim_thr=0.7, split=split)

@@ -8,6 +8,7 @@ import clip
 from spatial_clip import CLIPMaskedSpatialViT
 from spatial_clip import CLIPSpatialResNet
 
+DEVICE = torch.cuda.current_device() if torch.cuda.is_available() else "cpu"
 
 class VGPViT(nn.Module):
     def __init__(self, model='vit14', alpha=0.8, n_segments=[10, 50, 100, 200],
@@ -35,45 +36,45 @@ class VGPViT(nn.Module):
         self.temperature = temperature
         self.compactness = compactness
         self.sigma = sigma
-        self.cur_img = np.array([])
+        self.cur_img = torch.empty((), dtype=torch.uint8)
         self.cur_img_feat = []
         self.cur_img_masks = []
         self.txt_feats = {}
         self.heatmaps = {}
 
     def get_masks(self, im):
-        if np.array_equal(im, self.cur_img):
+        if torch.equal(im.cpu(), self.cur_img.cpu()):
             return self.cur_img_masks
 
         masks = []
         # Do SLIC with different number of segments so that it has a hierarchical scale structure
         # This can average out spurious activations that happens sometimes when the segments are too small
         for n in self.n_segments:
-            segments_slic = slic(im.astype(
+            segments_slic = slic(im.cpu().numpy().astype(
                 np.float32)/255., n_segments=n, compactness=self.compactness, sigma=self.sigma)
             for i in np.unique(segments_slic):
                 mask = segments_slic == i
                 masks.append(mask)
         masks = np.stack(masks, 0)
+        self.cur_img_masks = masks
         return masks
 
     def get_mask_scores(self, im, text):
         with torch.no_grad():
-            if np.array_equal(im, self.cur_img):
+            if torch.equal(im.cpu(), self.cur_img.cpu()):
                 image_features = self.cur_img_feat
-                im = Image.fromarray(im).convert('RGB')
-                im = im.resize((224, 224))
-                masks = self.get_masks(np.array(im))
+                masks = self.get_masks(im)
                 masks = torch.from_numpy(masks.astype(np.bool)).cuda()
             # im is uint8 numpy
             else:
-                self.cur_img = im
                 # h, w = im.shape[:2]
-                im = Image.fromarray(im).convert('RGB')
-                im = im.resize((224, 224))
-                masks = self.get_masks(np.array(im))
+                # im = Image.fromarray(im).convert('RGB')
+                masks = self.get_masks(im)
+                self.cur_img = im
                 masks = torch.from_numpy(masks.astype(np.bool)).cuda()
-                im = self.model.preprocess(im).unsqueeze(0).cuda()
+                im = self.model.preprocess(
+                        Image.fromarray(im.cpu().numpy())
+                    ).unsqueeze(0).cuda()
 
                 image_features = self.model(im, masks)
                 image_features = image_features.permute(0, 2, 1)
@@ -98,7 +99,7 @@ class VGPViT(nn.Module):
         return masks.cpu().numpy(), logits
 
     def get_heatmap(self, im, text):
-        if not np.array_equal(im, self.cur_img):
+        if not torch.equal(im.cpu(), self.cur_img.cpu()):
             self.heatmaps = {}
         if text in self.heatmaps:
             return self.heatmaps[text]
