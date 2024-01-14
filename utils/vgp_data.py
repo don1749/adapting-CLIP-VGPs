@@ -24,8 +24,9 @@ class FlickrVGPsDataset(Dataset):
         # self.phrase_types = phrase_types
         # if self.phrase_types:
         #     phrase_type_dict = get_phrase_type_dict(sentences_dir)
-
+        
         self.image_paths = []
+        self.image_idices = []
         self.phrase_pairs = []
         self.labels = []
 
@@ -38,6 +39,7 @@ class FlickrVGPsDataset(Dataset):
             for row in reader:
                 image_path = row["image"] + ".jpg"
                 self.image_paths.append(image_path)
+                self.image_idices.append(row["image"])
                 phrase1 = row["original_phrase1"]
                 phrase2 = row["original_phrase2"]
                 self.phrase_pairs.append([phrase1, phrase2])
@@ -47,6 +49,7 @@ class FlickrVGPsDataset(Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
+        img_idx = self.image_idices[idx]
         img_path = osp.join(self.image_dir, self.image_paths[idx])
         image = np.array(Image.open(img_path).convert("RGB").resize((224,224)))
         # image = transforms.ToTensor()(image)
@@ -55,6 +58,7 @@ class FlickrVGPsDataset(Dataset):
         label = self.labels[idx]=='True'
         data = {
             "idx": idx,
+            "image_idx": img_idx,
             "image": image,
             "phrases": phrase_pair,
             "label": label

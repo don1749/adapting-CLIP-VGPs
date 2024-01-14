@@ -30,6 +30,8 @@ class VGPViT(nn.Module):
             self.model = CLIPSpatialResNet(**args)
         else:
             raise Exception('Invalid model name: {}'.format(model))
+        self.model.eval()
+
         self.alpha = alpha
         self.n_segments = n_segments
         self.aggregation = aggregation
