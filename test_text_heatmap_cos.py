@@ -5,7 +5,7 @@ from tqdm import tqdm
 import csv
 from utils.vgp_data import FlickrVGPsDataset
 
-DATAROOT = '/work/adapting-CLIP-VGPs/data/flickr/heatmaps/test/'
+DATAROOT = '/work/adapting-CLIP-VGPs/data/flickr/heatmaps/train/'
 GPU = 7
 
 def text_cos_sim(model, phrases):
@@ -35,14 +35,14 @@ def hm_cos_sim(dataroot, img_path, phrases):
     return cosine_similarity(h1.reshape(1, -1), h2.reshape(1, -1))[0, 0] 
 
 def eval():
-    print('Setting up model')
-    model, _ = clip.load('ViT-L/14', device=GPU)
+    # print('Setting up model')
+    # model, _ = clip.load('ViT-L/14', device=GPU)
     print('Loading dataset')
-    test_dataset = FlickrVGPsDataset(data_type='val')
+    test_dataset = FlickrVGPsDataset(data_type='train')
     thres = 0.7
-    data_cols = ['img_idx', 'phrases', 'text_sim', 'heatmap_sim', 'avgsim', 'pred', 'ytrue']
+    data_cols = ['img_idx', 'phrases', 'heatmap_sim', 'pred', 'ytrue']
 
-    filename = '/work/adapting-CLIP-VGPs/text_hm_test.csv'
+    filename = '/work/adapting-CLIP-VGPs/train_hm_test.csv'
     with open(filename, mode='a', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(data_cols)
@@ -52,12 +52,12 @@ def eval():
             phrases = data['phrases']
             ytrue = data['label']
 
-            text_sim = text_cos_sim(model,phrases)
+            # text_sim = text_cos_sim(model,phrases)
             hm_sim = hm_cos_sim(DATAROOT, img_idx, phrases)
-            score = (text_sim+hm_sim)/2
-            pred = score > thres
+            # score = (text_sim+hm_sim)/2
+            pred = hm_sim > thres
             
             phrases = [replace_non_ascii(phrase) if contains_non_ascii(phrase) else phrase for phrase in phrases]
-            writer.writerow([img_idx, phrases, text_sim, hm_sim, score, pred, ytrue])
+            writer.writerow([img_idx, phrases, hm_sim, pred, ytrue])
 
 eval()

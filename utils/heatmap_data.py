@@ -8,7 +8,7 @@ import blosc
 DATA_ROOT = '/work/adapting-CLIP-VGPs/data'
 
 class VGPsHeatmapsDataset(Dataset):
-    def __init__(self, data_root=DATA_ROOT, split="train"):
+    def __init__(self, data_root=DATA_ROOT, split="train", text_only=False):
         self.data_root = data_root
         self.split = split
 
@@ -17,6 +17,7 @@ class VGPsHeatmapsDataset(Dataset):
         self.labels = []
         self.heatmaps = {}
         self.textembs = {}
+        self.text_only = text_only
         
         self.anno_csv_path = osp.join(
             self.data_root,
@@ -41,35 +42,38 @@ class VGPsHeatmapsDataset(Dataset):
         phrase_pair = self.phrase_pairs[idx]
         label = self.labels[idx]=='True'        
         
-        heatmap1_path = get_heatmap_path(
-                dataroot=f'{self.data_root}/flickr/heatmaps/{self.split}/',
-                img_path=img_idx,
-                phrase=phrase_pair[0]
-            )
-        heatmap2_path = get_heatmap_path(
-                dataroot=f'{self.data_root}/flickr/heatmaps/{self.split}/',
-                img_path=img_idx,
-                phrase=phrase_pair[1]
-            )
-        
-        if heatmap1_path in self.heatmaps:
-            heatmap1 = self.heatmaps[heatmap1_path]
-        else:
-            try:
-                heatmap1 = load_heatmap(heatmap1_path)
-            except:
-                print(heatmap1_path)
-            self.heatmaps[heatmap1_path] = heatmap1
+        # Load heatmap
+        if not self.text_only:
+            heatmap1_path = get_heatmap_path(
+                    dataroot=f'{self.data_root}/flickr/heatmaps/{self.split}/',
+                    img_path=img_idx,
+                    phrase=phrase_pair[0]
+                )
+            heatmap2_path = get_heatmap_path(
+                    dataroot=f'{self.data_root}/flickr/heatmaps/{self.split}/',
+                    img_path=img_idx,
+                    phrase=phrase_pair[1]
+                )
+            
+            if heatmap1_path in self.heatmaps:
+                heatmap1 = self.heatmaps[heatmap1_path]
+            else:
+                try:
+                    heatmap1 = load_heatmap(heatmap1_path)
+                except:
+                    print(heatmap1_path)
+                self.heatmaps[heatmap1_path] = heatmap1
 
-        if heatmap2_path in self.heatmaps:
-            heatmap2 = self.heatmaps[heatmap2_path]
-        else:
-            try:
-                heatmap2 = load_heatmap(heatmap2_path)
-            except:
-                print(heatmap2_path)
-            self.heatmaps[heatmap2_path] = heatmap2
+            if heatmap2_path in self.heatmaps:
+                heatmap2 = self.heatmaps[heatmap2_path]
+            else:
+                try:
+                    heatmap2 = load_heatmap(heatmap2_path)
+                except:
+                    print(heatmap2_path)
+                self.heatmaps[heatmap2_path] = heatmap2
         
+        # Load text emb
         if phrase_pair[0] in self.textembs:
             left_text_emb = self.textembs[phrase_pair[0]]
         else:
@@ -88,15 +92,24 @@ class VGPsHeatmapsDataset(Dataset):
                 print(f"Error loading textemb: {phrase_pair[1]}")
             self.textembs[phrase_pair[1]] = right_text_emb
         
-        data = {
-            "img_idx": img_idx,
-            "phrases": phrase_pair,
-            "left_text_emb": left_text_emb,
-            "right_text_emb": right_text_emb,
-            "left_heatmap": heatmap1,
-            "right_heatmap": heatmap2,
-            "label": label
-        }
+        if not self.text_only:
+            data = {
+                "img_idx": img_idx,
+                "phrases": phrase_pair,
+                "left_text_emb": left_text_emb,
+                "right_text_emb": right_text_emb,
+                "left_heatmap": heatmap1,
+                "right_heatmap": heatmap2,
+                "label": label
+            }
+        else:
+            data = {
+                "img_idx": img_idx,
+                "phrases": phrase_pair,
+                "left_text_emb": left_text_emb,
+                "right_text_emb": right_text_emb,
+                "label": label
+            }
         return data
 
 def contains_non_ascii(s):
