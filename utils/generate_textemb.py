@@ -12,12 +12,6 @@ from tqdm import tqdm
 from datetime import datetime
 import clip
 
-class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
 def setup_gpu(gpu, args):
     print('Setting up GPUs')
     torch.manual_seed(0)
